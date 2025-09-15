@@ -20,7 +20,7 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS notifications
                      (id INTEGER PRIMARY KEY, user TEXT, message TEXT, read BOOLEAN, created_at TEXT)''')
 
-        # Define new users (managers and employees)
+      
         new_users = [
             {'username': 'admin1', 'password': 'adminpass1', 'role': 'manager'},
             {'username': 'manager2', 'password': 'managerpass2', 'role': 'manager'},
