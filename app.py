@@ -200,7 +200,7 @@ def add_user():
             conn.close()
     
     return render_template('add_user.html')
-
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////app/data/tasks.db'
 # Logout
 @app.route('/logout')
 def logout():
