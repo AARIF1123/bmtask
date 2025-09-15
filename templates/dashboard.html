@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BM Task Manager Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow-x: hidden; }
+        #three-canvas { position: fixed; top: 0; left: 0; z-index: -1; opacity: 0.3; }
+        .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-900 to-blue-900 font-sans text-gray-200">
+    <!-- Three.js Canvas -->
+    <canvas id="three-canvas"></canvas>
+
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-700 to-indigo-600 text-white p-4 shadow-lg">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-3xl font-extrabold tracking-tight">TaskSphere</h1>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm font-medium">Welcome, {{ session.user }} ({{ session.role | capitalize }})</span>
+                    <a href="{{ url_for('logout') }}" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition transform hover:scale-105">Logout</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto p-6 flex-grow">
+            <!-- Notifications Section -->
+            <section class="mb-12">
+                <h2 class="text-2xl font-bold text-white mb-6">Notifications</h2>
+                {% if notifications %}
+                    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {% for notif in notifications %}
+                            <div class="bg-gray-800 p-5 rounded-xl shadow-lg card-hover">
+                                <p class="text-gray-200 font-medium">{{ notif.message }}</p>
+                                <p class="text-sm text-gray-400">{{ notif.created_at }}</p>
+                                <a href="{{ url_for('mark_read', notif_id=notif.id) }}" class="mt-2 inline-block text-indigo-400 hover:text-indigo-300 font-semibold transition">Mark Read</a>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-gray-400 italic">No new notifications to display.</p>
+                {% endif %}
+            </section>
+
+            <!-- Tasks Section -->
+            <section class="mb-12">
+                <h2 class="text-2xl font-bold text-white mb-6">Tasks</h2>
+                {% if tasks %}
+                    <div class="bg-gray-800 rounded-xl shadow-lg overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-900">
+                                <tr>
+                                    <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300">Title</th>
+                                    <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300">Description</th>
+                                    <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300">Status</th>
+                                    <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300">Due Date</th>
+                                    {% if session.role == 'employee' %}
+                                        <th class="px-6 py-4 text-left text-sm font-semibold text-gray-300">Action</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-700">
+                                {% for task in tasks %}
+                                    <tr class="hover:bg-gray-700 transition">
+                                        <td class="px-6 py-4 text-sm font-medium text-gray-200">{{ task.title }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-300">{{ task.description }}</td>
+                                        <td class="px-6 py-4 text-sm">
+                                            <span class="inline-flex px-3 py-1 text-xs font-semibold rounded-full 
+                                                {% if task.status == 'pending' %}bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900{% else %}bg-gradient-to-r from-green-500 to-green-600 text-white{% endif %}">
+                                                {{ task.status | capitalize }}
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-gray-300">
+                                            {% if task.due_date %}
+                                                {{ task.due_date }}
+                                                {% if session.role == 'employee' and task.status == 'pending' %}
+                                                    <span class="countdown-timer text-xs text-gray-400 block" data-due-date="{{ task.due_date }}"></span>
+                                                {% endif %}
+                                            {% else %}
+                                                No due date
+                                            {% endif %}
+                                        </td>
+                                        {% if session.role == 'employee' and task.status == 'pending' %}
+                                            <td class="px-6 py-4 text-sm">
+                                                <a href="{{ url_for('mark_done', task_id=task.id) }}" class="text-green-400 hover:text-green-300 font-semibold transition">Mark Done</a>
+                                            </td>
+                                        {% endif %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-gray-400 italic">No tasks assigned.</p>
+                {% endif %}
+            </section>
+
+            <!-- Assign Task Form (Manager Only) -->
+            {% if session.role == 'manager' %}
+                <section>
+                    <h2 class="text-2xl font-bold text-white mb-6">Assign New Task</h2>
+                    <form method="POST" action="{{ url_for('assign_task') }}" class="bg-gray-800 p-6 rounded-xl shadow-lg">
+                        <div class="mb-6">
+                            <label for="title" class="block text-sm font-medium text-gray-300">Task Title</label>
+                            <input type="text" name="title" id="title" required class="mt-2 block w-full border border-gray-600 rounded-lg p-3 bg-gray-900 text-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                        </div>
+                        <div class="mb-6">
+                            <label for="description" class="block text-sm font-medium text-gray-300">Description</label>
+                            <textarea name="description" id="description" rows="4" required class="mt-2 block w-full border border-gray-600 rounded-lg p-3 bg-gray-900 text-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition"></textarea>
+                        </div>
+                        <div class="mb-6">
+                            <label for="assigned_to" class="block text-sm font-medium text-gray-300">Assign to</label>
+                            <select name="assigned_to" id="assigned_to" required class="mt-2 block w-full border border-gray-600 rounded-lg p-3 bg-gray-900 text-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                                {% for emp in employees %}
+                                    <option value="{{ emp }}">{{ emp }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-6">
+                            <label for="due_date" class="block text-sm font-medium text-gray-300">Due Date (Optional)</label>
+                            <input type="datetime-local" name="due_date" id="due_date" class="mt-2 block w-full border border-gray-600 rounded-lg p-3 bg-gray-900 text-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                        </div>
+                        <button type="submit" class="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition animate-pulse-slow">Assign Task</button>
+                    </form>
+                </section>
+            {% endif %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-900 text-gray-400 text-center p-4">
+            <p>&copy; 2025 TaskSphere. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <!-- Three.js Particle System -->
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas'), alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particleCount = 1000;
+        const posArray = new Float32Array(particleCount * 3);
+
+        for (let i = 0; i < particleCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 1000;
+        }
+
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particleMaterial = new THREE.PointsMaterial({
+            size: 2,
+            color: 0x4f46e5,
+            transparent: true,
+            opacity: 0.6
+        });
+
+        const particles = new THREE.Points(particlesGeometry, particleMaterial);
+        scene.add(particles);
+        camera.position.z = 500;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            particles.rotation.y += 0.002;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Countdown Timer
+        function updateCountdown() {
+            const timers = document.querySelectorAll('.countdown-timer');
+            timers.forEach(timer => {
+                const dueDate = new Date(timer.getAttribute('data-due-date')).getTime();
+                const now = new Date().getTime();
+                const distance = dueDate - now;
+
+                if (distance < 0) {
+                    timer.textContent = 'Overdue';
+                    timer.classList.add('text-red-500');
+                    return;
+                }
+
+                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+                // timer.textContent = ${days}d ${hours}h ${minutes}m ${seconds}s;
+            });
+        }
+
+        setInterval(updateCountdown, 1000);
+        updateCountdown();
+    </script>
+</body>
+</html>
